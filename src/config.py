@@ -42,7 +42,8 @@ BATCH_SIZE = 50            # products per batch
 # The batch gets a random number between these two. Change them here - nowhere else.
 # (The image model has a few % error, so the number it actually finds can differ by one.)
 MIN_DEFECTIVE_PER_BATCH = 1
-MAX_DEFECTIVE_PER_BATCH = 5
+MAX_DEFECTIVE_PER_BATCH = 13
+REQUIRE_REVIEW_BEFORE_NEXT = True
  
 # Alert rules (starting values - tune them with your quality team)
 WARN_DEFECTS = 8           # WARNING when a batch reaches this many defective products

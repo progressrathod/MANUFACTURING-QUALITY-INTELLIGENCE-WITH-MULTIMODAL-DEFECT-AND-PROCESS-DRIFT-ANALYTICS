@@ -28,7 +28,17 @@ def _batch(c, batch_id):
     if row is None:
         raise KeyError(f"Unknown batch {batch_id}")
     return row
- 
+
+def _add_column(c, table, col, ddl):
+    cols = [
+        r["name"]
+        for r in c.execute(f"PRAGMA table_info({table})")
+    ]
+
+    if col not in cols:
+        c.execute(
+            f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"
+        )
  
 def _counts(c, batch_id):
     r = c.execute("""SELECT COUNT(*) AS n,
@@ -202,7 +212,8 @@ def close_batch(batch_id, user="system"):
             raise RuntimeError(f"Batch {batch_id} is already {b['status']}.")
         _log(c, batch_id, user, "CLOSED_BY_USER")
         return _close(c, batch_id)
- 
+    if defective >= WARN_DEFECTS or had_stop or (REQUIRE_REVIEW_BEFORE_NEXT and review_count > 0):
+        status = "ON_HOLD"
  
 def _build_report(c, batch_id):
     b, s = dict(_batch(c, batch_id)), _counts(c, batch_id)
@@ -239,22 +250,35 @@ def _build_report(c, batch_id):
         "defective_products": short(bad), "review_products": short(review),
         "alerts": alerts, "recommendation": rec,
     }
- 
- 
 # ------------------------------------------------------------------ manager decision
 def decide_batch(batch_id, decision, user, note):
     if decision not in ("RELEASE", "SCRAP"):
         raise ValueError("decision must be RELEASE or SCRAP")
+
     if not note.strip():
         raise ValueError("A note is required: why release or scrap this batch?")
+
     with get_conn() as c:
         b = _batch(c, batch_id)
+
         if b["status"] not in ("ON_HOLD", "COMPLETED"):
-            raise RuntimeError(f"Batch {batch_id} is {b['status']}; it cannot be decided yet.")
-        c.execute("UPDATE batches SET status=?, decision=?, decision_by=?, decision_note=? "
-                  "WHERE batch_id=?",
-                  ("RELEASED" if decision == "RELEASE" else "SCRAPPED",
-                   decision, user, note, batch_id))
+            raise RuntimeError(
+                f"Batch {batch_id} is {b['status']}; it cannot be decided yet."
+            )
+
+        c.execute(
+            """UPDATE batches
+               SET status=?, decision=?, decision_by=?, decision_note=?
+               WHERE batch_id=?""",
+            (
+                "RELEASED" if decision == "RELEASE" else "SCRAPPED",
+                decision,
+                user,
+                note,
+                batch_id
+            )
+        )
+
         _log(c, batch_id, user, decision, note)
  
  
@@ -309,3 +333,30 @@ def ack_alert(alert_id, user):
                         "WHERE alert_id=? AND acknowledged_at IS NULL", (user, _now(), alert_id))
         if cur.rowcount == 0:
             raise KeyError(f"No open alert {alert_id}")
+
+
+def pending_reviews(batch_id):
+    with get_conn() as c:
+        return c.execute(
+            "SELECT COUNT(*) FROM products WHERE batch_id=? "
+            "AND final_status='REVIEW' AND review_result IS NULL",
+            (batch_id,)).fetchone()[0]
+
+def review_product(product_id, result, user, note):
+    if result not in ("PASS", "REJECT"):
+        raise ValueError("Result must be PASS or REJECT.")
+    if not note.strip():
+        raise ValueError("A written note is required.")
+    with get_conn() as c:
+        p = c.execute("SELECT batch_id FROM products WHERE product_id=? "
+                      "AND final_status='REVIEW'", (product_id,)).fetchone()
+        if not p:
+            raise LookupError("No REVIEW product with that ID.")
+        now = datetime.now().isoformat(timespec="seconds")
+        c.execute("UPDATE products SET review_result=?, reviewed_by=?, "
+                  "reviewed_at=?, review_note=? WHERE product_id=?",
+                  (result, user, now, note, product_id))
+        c.execute("INSERT INTO events (batch_id, at, actor, action, note) "
+                  "VALUES (?,?,?,?,?)",
+                  (p["batch_id"], now, user, f"REVIEW_{result}", f"{product_id}: {note}"))
+    return {"product_id": product_id, "result": result}
