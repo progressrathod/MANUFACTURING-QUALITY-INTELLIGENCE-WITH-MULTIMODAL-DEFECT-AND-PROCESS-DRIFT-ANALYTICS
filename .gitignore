@@ -1,0 +1,22 @@
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+ 
+# Large raw data - keep out of GitHub
+data/images/
+data/images_split/
+casting_512x512.zip
+_unzip_tmp/
+ 
+# Generated splits (recreated by preprocess_process.py)
+data/process_data/train.csv
+data/process_data/val.csv
+data/process_data/test.csv
+ 
+# OS / editor
+.DS_Store
+.vscode/

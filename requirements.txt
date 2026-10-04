@@ -1,0 +1,17 @@
+pandas
+numpy
+scikit-learn
+xgboost
+torch
+torchvision
+shap
+fastapi
+uvicorn
+streamlit
+matplotlib
+pillow
+python-multipart
+requests
+httpx
+pytest
+joblib

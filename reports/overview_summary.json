@@ -1,0 +1,6 @@
+{
+  "total_products": 10000,
+  "defective_products": 1601,
+  "ok_products": 8399,
+  "drift_alerts": 150
+}
